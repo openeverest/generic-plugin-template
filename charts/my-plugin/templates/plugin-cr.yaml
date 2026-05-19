@@ -13,9 +13,6 @@ spec:
       namespace: {{ .Release.Namespace }}
       name: {{ include "my-plugin.fullname" . }}
       port: {{ .Values.service.port }}
-    modes:
-      requestHandler:
-        basePath: "/api"
   frontend:
     bundlePath: {{ .Values.plugin.bundlePath | quote }}
     extensionPoints:
