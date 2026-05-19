@@ -15,7 +15,7 @@ service:
 
 plugin:
   displayName: "My Plugin"
-  description: "An OpenEverest generic plugin."
+  description: "A working OpenEverest generic plugin template — customize it to build your own plugin."
   vendor: "OpenEverest"
   enabled: true
   bundlePath: "/main.js"
@@ -27,6 +27,9 @@ plugin:
       path: /my-plugin
       label: My Plugin
       icon: extension
+    - type: clusterDetailTab
+      path: my-plugin
+      label: My Plugin
 
 # Optional override for the Everest API URL. When left empty the backend
 # auto-discovers the everest Service via Kubernetes-injected env vars

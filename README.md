@@ -1,6 +1,8 @@
 # OpenEverest Generic Plugin Template
 
-A template repository for building [OpenEverest](https://github.com/openeverest/openeverest) generic plugins. Clone this repository and follow the instructions below to scaffold your own plugin.
+A template repository for building [OpenEverest](https://github.com/openeverest/openeverest) generic plugins.
+
+**This is a working plugin out of the box.** Install it as-is to see a "Hello" page in the OpenEverest UI with a sidebar entry, a dedicated route, and a cluster detail tab. Then customize it to build your own plugin.
 
 ## Quick Start
 
@@ -30,6 +32,15 @@ A template repository for building [OpenEverest](https://github.com/openeverest/
    ```
 
 5. **Start developing!**
+
+## What You Get
+
+When installed, this plugin registers:
+
+- **Sidebar entry** — "My Plugin" appears in the OpenEverest navigation.
+- **Route** — a dedicated page at `/plugins/my-plugin` showing a hello message and backend connectivity status.
+- **Cluster detail tab** — a "My Plugin" tab on every database cluster page showing cluster metadata.
+- **Backend API** — a `/api/hello` endpoint demonstrating the full request flow (browser → host proxy → backend).
 
 ## Architecture
 
@@ -126,14 +137,55 @@ cd backend && go mod tidy && cd ..              # ensure go.sum exists
 docker build -t my-plugin:dev .
 ```
 
-## Install with Helm
+## Install
+
+### Prerequisites
+
+- An OpenEverest cluster with the Plugin CRD installed (Everest v2+)
+- Helm 3
+- `kubectl` configured to access the cluster
+
+### From a release (recommended)
+
+After pushing a `vX.Y.Z` tag, the CI builds and publishes the image and Helm chart to GHCR. Install directly from the OCI registry:
 
 ```bash
+helm install my-plugin oci://ghcr.io/<your-org>/charts/my-plugin \
+  --version 0.1.0 \
+  -n everest-system
+```
+
+### From source (local development)
+
+Build the image and install the chart from the local checkout:
+
+```bash
+# 1. Build the frontend and Docker image
+npm install && npm run build
+cd backend && go mod tidy && cd ..
+docker build -t my-plugin:dev .
+
+# 2. Load the image into your cluster (kind example)
+kind load docker-image my-plugin:dev --name everest
+
+# 3. Install via Helm
 helm install my-plugin charts/my-plugin/ \
   -n everest-system \
-  --set image.repository=<your-registry>/my-plugin \
-  --set image.tag=<tag>
+  --set image.repository=my-plugin \
+  --set image.tag=dev \
+  --set image.pullPolicy=Never
 ```
+
+### Verify
+
+After installation, confirm the plugin is running:
+
+```bash
+kubectl get plugins                              # should show my-plugin
+kubectl get pods -n everest-system -l app.kubernetes.io/name=my-plugin
+```
+
+Then open the OpenEverest UI — you should see "My Plugin" in the sidebar.
 
 ## Uninstall
 
