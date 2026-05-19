@@ -139,6 +139,18 @@ docker build -t my-plugin:dev .
 
 ## Install
 
+### Try it now
+
+You can install this template plugin into any OpenEverest v2+ cluster to see it in action:
+
+```bash
+helm install my-plugin oci://ghcr.io/openeverest/charts/my-plugin \
+  --version 0.1.0 \
+  -n everest-system
+```
+
+Open the OpenEverest UI — "My Plugin" will appear in the sidebar.
+
 ### Prerequisites
 
 - An OpenEverest cluster with the Plugin CRD installed (Everest v2+)
@@ -197,7 +209,7 @@ helm uninstall my-plugin -n everest-system
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `image.repository` | Container image | `ghcr.io/openeverest/my-plugin` |
+| `image.repository` | Container image | `ghcr.io/openeverest/generic-plugin-template` |
 | `image.tag` | Image tag | chart appVersion |
 | `replicaCount` | Replicas | `1` |
 | `service.port` | Service port | `8080` |

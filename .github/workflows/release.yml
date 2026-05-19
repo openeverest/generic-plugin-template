@@ -141,9 +141,12 @@ jobs:
           sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" "$CHART"
           cat "$CHART"
 
-      - name: Bump image tag in values.yaml
+      - name: Bump image in values.yaml
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          sed -i "s|^  repository:.*|  repository: ${IMAGE}|" \
+            charts/my-plugin/values.yaml
           sed -i "s/^  tag:.*/  tag: \"${VERSION}\"/" \
             charts/my-plugin/values.yaml
 
