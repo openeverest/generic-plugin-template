@@ -102,7 +102,6 @@ const register: PluginRegisterFn = (api: PluginApi) => {
   api.registerExtension({
     type: 'sidebarItem',
     label: 'My Plugin',
-    icon: 'extension',
   });
 
   // Register the main route.
