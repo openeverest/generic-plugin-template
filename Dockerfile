@@ -14,6 +14,8 @@ RUN go mod download
 # Copy backend source and the pre-built frontend bundle.
 COPY backend/ .
 COPY dist/main.js ./dist/main.js
+COPY src/puzzle-piece.png ./dist/icon.png
+
 
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o server .
 

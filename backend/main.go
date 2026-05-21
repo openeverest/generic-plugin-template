@@ -23,6 +23,9 @@ import (
 //go:embed dist/main.js
 var distFS embed.FS
 
+//go:embed dist/icon.png
+var iconData []byte
+
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -102,6 +105,13 @@ func handleBundle(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write(data)
 }
 
+// GET /icon.png — serves the plugin icon.
+func handleIcon(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	_, _ = w.Write(iconData)
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -111,6 +121,9 @@ func main() {
 
 	// Frontend bundle.
 	mux.HandleFunc("GET /main.js", handleBundle)
+
+	// Plugin icon.
+	mux.HandleFunc("GET /icon.png", handleIcon)
 
 	// Health check.
 	mux.HandleFunc("GET /healthz", handleHealthz)
