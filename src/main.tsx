@@ -362,6 +362,135 @@ const MyPluginClusterTab = (props: ClusterDetailTabProps) => {
 };
 
 // ---------------------------------------------------------------------------
+// Wizard step — demonstrates instanceCreateStep / instanceEditStep
+// ---------------------------------------------------------------------------
+// These extension points let a plugin own a full wizard step in the
+// create- and edit-instance flows (vs. instanceCreateFormSection /
+// instanceEditFormSection which embed inside an existing step).
+//
+// Props (per the spec):
+//   instanceCreateStep: { formValues, onChange, namespace, onValidityChange }
+//   instanceEditStep:   { instance, formValues, onChange, namespace, onValidityChange }
+//
+// `onChange(pluginConfig)` writes an opaque JSON blob keyed by plugin name into
+// the wizard's form state. `onValidityChange(boolean)` gates the wizard's
+// Next/Submit button.
+
+type InstanceStepConfig = {
+  team?: string;
+  costCenter?: string;
+  notes?: string;
+};
+
+type InstanceCreateStepProps = {
+  formValues: Record<string, unknown>;
+  onChange: (config: InstanceStepConfig) => void;
+  namespace: string;
+  onValidityChange: (valid: boolean) => void;
+};
+
+type InstanceEditStepProps = InstanceCreateStepProps & {
+  instance: { metadata?: { labels?: Record<string, string> } } & Record<string, unknown>;
+};
+
+const MyPluginWizardStep = (
+  props: InstanceCreateStepProps & { instance?: InstanceEditStepProps['instance'] }
+) => {
+  const existing = (props.formValues['my-plugin'] as InstanceStepConfig | undefined) ?? {};
+  const labels = props.instance?.metadata?.labels ?? {};
+
+  const [team, setTeam] = React.useState<string>(
+    existing.team ?? labels['my-plugin/team'] ?? ''
+  );
+  const [costCenter, setCostCenter] = React.useState<string>(
+    existing.costCenter ?? labels['my-plugin/cost-center'] ?? ''
+  );
+  const [notes, setNotes] = React.useState<string>(existing.notes ?? '');
+
+  // Push state up to the wizard whenever any field changes.
+  React.useEffect(() => {
+    props.onChange({ team: team.trim(), costCenter: costCenter.trim(), notes: notes.trim() });
+    // `team` is required; gate Next/Submit on it.
+    props.onValidityChange(team.trim().length > 0);
+  }, [team, costCenter, notes]);
+
+  const fieldStyle = {
+    display: 'block',
+    width: '100%',
+    padding: '0.5rem',
+    border: '1px solid #d0d7de',
+    borderRadius: 6,
+    fontSize: '0.9rem',
+    boxSizing: 'border-box' as const,
+  };
+  const labelStyle = { display: 'block', marginBottom: '0.25rem', fontWeight: 600 };
+  const helpStyle = { color: '#666', fontSize: '0.8rem', marginTop: '0.25rem' };
+
+  return React.createElement(
+    'div',
+    { style: { maxWidth: 520, padding: '1rem' } },
+    React.createElement('h3', { style: { marginTop: 0 } }, 'My Plugin — Tagging'),
+    React.createElement(
+      'p',
+      { style: { color: '#555', marginTop: 0 } },
+      props.instance
+        ? `Edit plugin-managed tags for this instance in namespace ${props.namespace}.`
+        : `Attach plugin-managed tags to the new instance in namespace ${props.namespace}.`
+    ),
+    React.createElement(
+      'div',
+      { style: { marginTop: '1rem' } },
+      React.createElement('label', { style: labelStyle }, 'Team *'),
+      React.createElement('input', {
+        type: 'text',
+        value: team,
+        onChange: (e: { target: { value: string } }) => setTeam(e.target.value),
+        placeholder: 'e.g. payments',
+        style: fieldStyle,
+      }),
+      React.createElement('p', { style: helpStyle }, 'Required. Used to route alerts to the owning team.')
+    ),
+    React.createElement(
+      'div',
+      { style: { marginTop: '1rem' } },
+      React.createElement('label', { style: labelStyle }, 'Cost center'),
+      React.createElement('input', {
+        type: 'text',
+        value: costCenter,
+        onChange: (e: { target: { value: string } }) => setCostCenter(e.target.value),
+        placeholder: 'e.g. CC-1042',
+        style: fieldStyle,
+      })
+    ),
+    React.createElement(
+      'div',
+      { style: { marginTop: '1rem' } },
+      React.createElement('label', { style: labelStyle }, 'Notes'),
+      React.createElement('textarea', {
+        value: notes,
+        onChange: (e: { target: { value: string } }) => setNotes(e.target.value),
+        rows: 3,
+        placeholder: 'Optional free-form notes',
+        style: { ...fieldStyle, fontFamily: 'inherit', resize: 'vertical' },
+      })
+    ),
+    team.trim().length === 0
+      ? React.createElement(
+          'p',
+          { style: { marginTop: '1rem', color: '#c62828', fontSize: '0.85rem' } },
+          'Enter a team to enable the Next button.'
+        )
+      : null
+  );
+};
+
+const MyPluginCreateStep = (props: InstanceCreateStepProps) =>
+  React.createElement(MyPluginWizardStep, props);
+
+const MyPluginEditStep = (props: InstanceEditStepProps) =>
+  React.createElement(MyPluginWizardStep, props);
+
+// ---------------------------------------------------------------------------
 // Plugin registration
 // ---------------------------------------------------------------------------
 const register: PluginRegisterFn = (api: PluginApi) => {
@@ -388,6 +517,23 @@ const register: PluginRegisterFn = (api: PluginApi) => {
     path: 'my-plugin',
     component: MyPluginClusterTab,
   });
+
+  // Wizard steps. The SDK union does not yet include these new types, so the
+  // registration objects are passed through `unknown` to keep TypeScript happy
+  // until the SDK is updated.
+  api.registerExtension({
+    type: 'instanceCreateStep',
+    label: 'My Plugin',
+    component: MyPluginCreateStep,
+    // Optional: providers: ['postgresql'],
+  } as unknown as Parameters<PluginApi['registerExtension']>[0]);
+
+  api.registerExtension({
+    type: 'instanceEditStep',
+    label: 'My Plugin',
+    component: MyPluginEditStep,
+    // Optional: providers: ['postgresql'],
+  } as unknown as Parameters<PluginApi['registerExtension']>[0]);
 
   // Uncomment to restrict the tab to specific engine types:
   // api.registerExtension({

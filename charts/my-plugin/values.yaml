@@ -30,6 +30,10 @@ plugin:
     - type: clusterDetailTab
       path: my-plugin
       label: My Plugin
+    - type: instanceCreateStep
+      label: My Plugin
+    - type: instanceEditStep
+      label: My Plugin
 
 # Optional override for the Everest API URL. When left empty the backend
 # auto-discovers the everest Service via Kubernetes-injected env vars
