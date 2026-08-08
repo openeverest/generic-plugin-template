@@ -13,32 +13,6 @@ spec:
       namespace: {{ .Release.Namespace }}
       name: {{ include "my-plugin.fullname" . }}
       port: {{ .Values.service.port }}
-    modes:
-      eventConsumer:
-        types:
-          - database-cluster.created
-          - database-cluster.ready
-          - database-cluster.updated
-          - database-cluster.deleted
-          - database-cluster.failed
-          - backup.started
-          - backup.completed
-          - backup.failed
-          - restore.started
-          - restore.completed
-          - restore.failed
-          - instance.created
-          - instance.deleted
-          - user.login
-          - user.login-failed
-          - user.logout
-          - plugin.installed
-          - plugin.uninstalled
-          - plugin.enabled
-          - plugin.disabled
-          - namespace.added
-          - namespace.removed
-          - settings.updated
   frontend:
     bundlePath: {{ .Values.plugin.bundlePath | quote }}
     extensionPoints:
