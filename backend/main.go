@@ -9,13 +9,16 @@
 package main
 
 import (
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 )
 
 // dist/main.js is copied from the frontend build during the Docker build.
@@ -93,16 +96,44 @@ func handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("ok"))
 }
 
+// bundleData and bundleETag are computed once: the frontend is embedded, so it
+// never changes for the lifetime of the process (a new release ships a new
+// image, hence a new process with a new ETag).
+var (
+	bundleData    []byte
+	bundleDataErr error
+	bundleETag    string
+	bundleOnce    sync.Once
+)
+
+func loadBundle() {
+	bundleData, bundleDataErr = distFS.ReadFile("dist/main.js")
+	if bundleDataErr == nil {
+		sum := sha256.Sum256(bundleData)
+		bundleETag = `"` + hex.EncodeToString(sum[:]) + `"`
+	}
+}
+
 // GET /main.js — serves the frontend bundle.
-func handleBundle(w http.ResponseWriter, _ *http.Request) {
-	data, err := distFS.ReadFile("dist/main.js")
-	if err != nil {
+//
+// The URL is stable (`main.js`), so we can't rely on a hashed filename to bust
+// the browser cache on release. Instead we serve a content-addressed ETag with
+// `no-cache`: the browser revalidates on every load and gets a cheap 304 when
+// the bundle is unchanged, but picks up a new release immediately.
+func handleBundle(w http.ResponseWriter, r *http.Request) {
+	bundleOnce.Do(loadBundle)
+	if bundleDataErr != nil {
 		http.Error(w, "bundle not found", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "application/javascript")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
-	_, _ = w.Write(data)
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("ETag", bundleETag)
+	if r.Header.Get("If-None-Match") == bundleETag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	_, _ = w.Write(bundleData)
 }
 
 // GET /icon.png — serves the plugin icon.

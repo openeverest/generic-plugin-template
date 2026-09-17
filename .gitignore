@@ -9,6 +9,10 @@ backend/dist/*
 !backend/dist/main.js
 !backend/dist/icon.png
 
+# Go build output (e.g. `go build` in backend/ produces backend/backend)
+/backend/backend
+/backend/server
+
 # IDE
 .idea/
 .vscode/
