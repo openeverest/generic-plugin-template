@@ -73,7 +73,7 @@ plugin-my-feature/
 ### Request flow
 
 ```
-Browser → GET /v1/plugins/{name}/api/...
+Browser → GET /v1/clusters/{cluster}/plugins/{name}/api/...
          ↓ (host validates session, adds X-Everest-User JWT)
 Backend → processes request, optionally calls OpenEverest API
          ↓
