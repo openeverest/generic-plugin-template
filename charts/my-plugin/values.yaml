@@ -18,6 +18,12 @@ plugin:
   description: "A working OpenEverest generic plugin template — customize it to build your own plugin."
   vendor: "OpenEverest"
   enabled: true
+  # Host versions this plugin works with. The UI needs host v2.0.0-dev.4+ (for
+  # PluginApi.cssNonce); the host compares major.minor.patch only, so the range
+  # can't tell 2.0.0 dev builds apart.
+  compatibleHostVersions: ">=2.0.0 <3.0.0"
+  # The shared React major the bundle is built against (host import map).
+  compatibleUiContractVersions: "^18.0.0"
   bundlePath: "/main.js"
   extensionPoints:
     - type: route
