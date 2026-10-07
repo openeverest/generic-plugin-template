@@ -6,6 +6,8 @@ spec:
   displayName: {{ .Values.plugin.displayName | quote }}
   description: {{ .Values.plugin.description | quote }}
   version: {{ .Chart.AppVersion | quote }}
+  compatibleHostVersions: {{ .Values.plugin.compatibleHostVersions | quote }}
+  compatibleUiContractVersions: {{ .Values.plugin.compatibleUiContractVersions | quote }}
   vendor: {{ .Values.plugin.vendor | quote }}
   enabled: {{ .Values.plugin.enabled }}
   backend:

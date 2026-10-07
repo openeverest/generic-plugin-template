@@ -47,7 +47,10 @@ When installed, this plugin registers:
 ```
 plugin-my-feature/
 ├── src/
-│   └── main.tsx              # Frontend — TypeScript/React plugin bundle
+│   ├── main.tsx              # Frontend entry — register(api) adds the extension points
+│   ├── plugin-api.ts         # Host API captured at register time; backend fetch helper
+│   ├── components/           # MUI components, themed by @openeverest/plugin-theme
+│   └── hooks/                # e.g. the /v1/events SSE subscription
 ├── backend/
 │   ├── main.go               # Backend — Go HTTP server (example; use any language)
 │   └── go.mod
@@ -97,6 +100,17 @@ This template follows the [Generic Plugins Architecture Design](https://github.c
 - **Frontend bundle** — an ESM module exporting a `register(api)` function that registers UI extension points.
 - **Backend** — any HTTP service (language-agnostic) proxied by the OpenEverest API server; receives `X-Everest-User` JWT for auth.
 - **Extension points** — `route`, `sidebarItem`, `clusterDetailTab`, `clusterAction`, `clusterCard`, `globalDashboardWidget`, `settingsPanel`, etc.
+
+## Frontend & theming
+
+The UI is built with [MUI](https://mui.com) and themed by [`@openeverest/plugin-theme`](https://www.npmjs.com/package/@openeverest/plugin-theme), so it follows the OpenEverest palette, typography and light/dark mode. Types come from [`@openeverest/plugin-sdk`](https://www.npmjs.com/package/@openeverest/plugin-sdk).
+
+- **Wrap every registered component in `PluginRoot`** (`src/components/plugin-root.tsx`). It passes the host's CSP nonce and a plugin-unique Emotion cache key (`my-plugin`, rename it with the plugin; lowercase letters and `-` only).
+- **React is shared, MUI is yours.** `react`, `react-dom` and `react/jsx-runtime` are external: the host import map provides them (`vite.config.ts`). MUI and Emotion are bundled at the version in `package.json`, so a host MUI upgrade never breaks the plugin.
+- **Style with `sx` and theme values** (`text.secondary`, `success.main`, `theme.spacing`) rather than hard-coded colours, so dark mode works.
+- **No global CSS**: no `CssBaseline`, `GlobalStyles` or stylesheets with global selectors.
+
+The full rules are in §8.1 and §9 of the spec.
 
 ## Local Development
 
@@ -153,7 +167,7 @@ Open the OpenEverest UI — "My Plugin" will appear in the sidebar.
 
 ### Prerequisites
 
-- An OpenEverest cluster with the Plugin CRD installed (Everest v2+)
+- An OpenEverest cluster with the Plugin CRD installed (Everest v2.0.0-dev.4 or later)
 - Helm 3
 - `kubectl` configured to access the cluster
 
