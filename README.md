@@ -50,7 +50,7 @@ plugin-my-feature/
 │   ├── main.tsx              # Frontend entry — register(api) adds the extension points
 │   ├── plugin-api.ts         # Host API captured at register time; backend fetch helper
 │   ├── components/           # MUI components, themed by @openeverest/plugin-theme
-│   └── hooks/                # e.g. the /v1/events SSE subscription
+│   └── hooks/                # e.g. the /v1/clusters/{cluster}/events SSE subscription
 ├── backend/
 │   ├── main.go               # Backend — Go HTTP server (example; use any language)
 │   └── go.mod
@@ -167,7 +167,8 @@ Open the OpenEverest UI — "My Plugin" will appear in the sidebar.
 
 ### Prerequisites
 
-- An OpenEverest cluster with the Plugin CRD installed (Everest v2.0.0-dev.4 or later)
+- OpenEverest 2.0.0-alpha.1 or later (the event stream example uses the per-cluster
+  lifecycle events API; earlier previews served `/v1/events` instead)
 - Helm 3
 - `kubectl` configured to access the cluster
 
