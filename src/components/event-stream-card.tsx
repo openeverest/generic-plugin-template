@@ -1,5 +1,6 @@
 import { Box, Button, Card, CardContent, Paper, Stack, Typography } from '@mui/material';
 import { useEventStream, type StreamState } from '../hooks/use-event-stream';
+import { clusterName } from '../plugin-api';
 import { CODE_BLOCK_SX } from './code-block.constants';
 
 const STATE_COLOR: Record<StreamState, string> = {
@@ -16,7 +17,7 @@ export const EventStreamCard = () => {
       ? `Connected. Capturing all event types. Stored in memory: ${events.length}`
       : state === 'error'
         ? (error ?? 'Disconnected')
-        : 'Connecting to /v1/events…';
+        : `Connecting to /v1/clusters/${clusterName}/events…`;
 
   return (
     <Card variant="outlined">
@@ -38,7 +39,7 @@ export const EventStreamCard = () => {
         ) : (
           <Stack spacing={1} sx={{ mt: 1.5, maxHeight: 360, overflow: 'auto' }}>
             {events.map((event, index) => (
-              <Paper key={`${event.resourceVersion ?? 'no-rv'}-${index}`} variant="outlined" sx={{ p: 1 }}>
+              <Paper key={`${event.cursor ?? event.name}-${index}`} variant="outlined" sx={{ p: 1 }}>
                 <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
                   <Typography variant="subtitle2">{event.type ?? 'unknown'}</Typography>
                   <Typography variant="caption" color="text.secondary">
@@ -47,8 +48,10 @@ export const EventStreamCard = () => {
                   </Typography>
                 </Stack>
                 <Typography variant="body2" color="text.secondary">
-                  {event.resource?.kind ?? 'Resource'}
-                  {event.resource?.name ? `/${event.resource.name}` : ''}
+                  {event.object?.kind ?? 'Object'}
+                  {event.object?.name ? `/${event.object.name}` : ''}
+                  {event.phase ? ` | ${event.phase.from ?? '?'} → ${event.phase.to ?? '?'}` : ''}
+                  {event.actor ? ` | by ${event.actor.id ?? event.actor.type}` : ''}
                 </Typography>
                 <Box component="pre" sx={{ ...CODE_BLOCK_SX, mt: 1 }}>
                   {JSON.stringify(event, null, 2)}

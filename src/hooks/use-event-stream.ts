@@ -1,23 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
+import { clusterName } from '../plugin-api';
 
-export type PluginEvent = {
-  resourceVersion?: string;
-  type?: string;
-  occurredAt?: string;
+// A lifecycle event, as served by GET /v1/clusters/{cluster}/events
+// (OpenEverest 2.0.0-alpha.1+).
+export type LifecycleEvent = {
+  name: string;
+  cursor: string;
+  occurredAt: string;
+  // Kind and reason, e.g. instance.phase-changed.
+  type: string;
+  reason: string;
+  severity: 'Normal' | 'Warning';
+  cluster: string;
   namespace?: string;
-  resource?: {
-    kind?: string;
-    name?: string;
-  };
+  object: { apiVersion?: string; kind: string; name: string; uid?: string };
+  actor?: { type: 'user' | 'system' | 'kubernetes-client'; id?: string };
+  phase?: { from?: string; to?: string };
+  instance?: string;
+  provider?: string;
+  message?: string;
   [key: string]: unknown;
 };
 
 export type StreamState = 'connecting' | 'open' | 'error';
 
 const MAX_EVENTS = 200;
+const LIST_LIMIT = 100;
 
-function parseFrames(buffer: string): { payloads: string[]; rest: string } {
-  const payloads: string[] = [];
+type Frame = { id?: string; event?: string; data: string };
+
+// Splits complete Server-Sent Events frames off the buffer.
+function parseFrames(buffer: string): { frames: Frame[]; rest: string } {
+  const frames: Frame[] = [];
   let rest = buffer;
 
   while (true) {
@@ -25,42 +39,59 @@ function parseFrames(buffer: string): { payloads: string[]; rest: string } {
     if (sep === -1) {
       break;
     }
-    const frame = rest.slice(0, sep);
+    const block = rest.slice(0, sep);
     rest = rest.slice(sep + (rest[sep] === '\r' ? 4 : 2));
 
-    const dataLines = frame
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice(5).replace(/^ /, ''));
-
-    if (dataLines.length > 0) {
-      payloads.push(dataLines.join('\n'));
+    const frame: Frame = { data: '' };
+    const data: string[] = [];
+    for (const line of block.split(/\r?\n/)) {
+      const colon = line.indexOf(':');
+      if (colon <= 0) {
+        continue;
+      }
+      const field = line.slice(0, colon);
+      const value = line.slice(colon + 1).replace(/^ /, '');
+      if (field === 'data') {
+        data.push(value);
+      } else if (field === 'id') {
+        frame.id = value;
+      } else if (field === 'event') {
+        frame.event = value;
+      }
     }
+    frame.data = data.join('\n');
+    frames.push(frame);
   }
 
-  return { payloads, rest };
+  return { frames, rest };
 }
 
-function parseEvent(raw: string): PluginEvent | null {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return null;
-  }
+function parseJSON<T>(raw: string): T | null {
   try {
-    const parsed: unknown = JSON.parse(trimmed);
-    return parsed && typeof parsed === 'object' ? (parsed as PluginEvent) : null;
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as T) : null;
   } catch {
     return null;
   }
 }
 
+class StreamError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number
+  ) {
+    super(message);
+  }
+}
+
 // For internal sessions the access token lives only in the host UI's memory, so
 // the plugin mints its own by exchanging the HttpOnly refresh cookie via
-// /v1/auth/token. For OIDC sessions the host keeps it in localStorage.
+// /v1/auth/token. For SSO sessions the host keeps the OpenEverest token it
+// got for the ID token in localStorage.
 async function acquireToken(): Promise<string | null> {
-  const oidcToken = window.localStorage.getItem('everestToken');
-  if (oidcToken) {
-    return oidcToken;
+  const ssoToken = window.localStorage.getItem('everestToken');
+  if (ssoToken) {
+    return ssoToken;
   }
 
   try {
@@ -83,10 +114,19 @@ async function acquireToken(): Promise<string | null> {
   }
 }
 
-// Subscribes to the host's lifecycle event stream (GET /v1/events, SSE) and
-// resumes from the last seen resourceVersion after a reconnect.
+function describeStatus(status: number): string {
+  if (status === 403) {
+    return 'HTTP 403: reading events needs the read-events permission on the objects';
+  }
+  return `HTTP ${status}`;
+}
+
+// Lists the cluster's retained lifecycle events, then streams new ones
+// (GET /v1/clusters/{cluster}/events?watch=true&since=<cursor>, SSE). It
+// resumes from the last cursor after a reconnect, and relists when the
+// cluster can no longer resume from it (an error event with code 410).
 export function useEventStream() {
-  const [events, setEvents] = useState<PluginEvent[]>([]);
+  const [events, setEvents] = useState<LifecycleEvent[]>([]);
   const [state, setState] = useState<StreamState>('connecting');
   const [error, setError] = useState<string | null>(null);
   const cursorRef = useRef<string | null>(null);
@@ -95,16 +135,51 @@ export function useEventStream() {
     let stopped = false;
     let abortController: AbortController | null = null;
     let reconnectTimer: number | undefined;
+    const base = `/v1/clusters/${encodeURIComponent(clusterName)}/events`;
 
-    const handlePayload = (raw: string) => {
-      const event = parseEvent(raw);
-      if (!event) {
-        return;
+    const request = (url: string, token: string, accept: string) =>
+      fetch(url, {
+        headers: { Accept: accept, Authorization: `Bearer ${token}` },
+        signal: abortController?.signal,
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+
+    // The first page of retained events, newest first, and the cursor to
+    // stream from.
+    const list = async (token: string) => {
+      const response = await request(`${base}?limit=${LIST_LIMIT}`, token, 'application/json');
+      if (!response.ok) {
+        throw new StreamError(describeStatus(response.status), response.status);
       }
-      if (typeof event.resourceVersion === 'string') {
-        cursorRef.current = event.resourceVersion;
+      const page: { items?: LifecycleEvent[]; resourceVersion?: string } = await response.json();
+      const items = [...(page.items ?? [])].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+      setEvents(items.slice(0, MAX_EVENTS));
+      cursorRef.current = page.resourceVersion ?? null;
+    };
+
+    const handleFrame = (frame: Frame) => {
+      switch (frame.event) {
+        case 'bookmark':
+          break;
+        case 'error': {
+          const body = parseJSON<{ code?: number; message?: string }>(frame.data);
+          if (body?.code === 410) {
+            cursorRef.current = null;
+          }
+          throw new StreamError(body?.message ?? 'stream error', body?.code);
+        }
+        default: {
+          const event = parseJSON<LifecycleEvent>(frame.data);
+          if (event) {
+            setEvents((previous) => [event, ...previous].slice(0, MAX_EVENTS));
+          }
+        }
       }
-      setEvents((previous) => [event, ...previous].slice(0, MAX_EVENTS));
+      // The SSE id is the event's cursor.
+      if (frame.id) {
+        cursorRef.current = frame.id;
+      }
     };
 
     const connect = async () => {
@@ -123,25 +198,16 @@ export function useEventStream() {
         return;
       }
 
-      const url = cursorRef.current
-        ? `/v1/events?since=${encodeURIComponent(cursorRef.current)}`
-        : '/v1/events';
-
       abortController = new AbortController();
 
       try {
-        const response = await fetch(url, {
-          headers: {
-            Accept: 'text/event-stream',
-            Authorization: `Bearer ${token}`,
-          },
-          signal: abortController.signal,
-          credentials: 'same-origin',
-          cache: 'no-store',
-        });
-
+        if (cursorRef.current === null) {
+          await list(token);
+        }
+        const since = cursorRef.current ? `&since=${encodeURIComponent(cursorRef.current)}` : '';
+        const response = await request(`${base}?watch=true${since}`, token, 'text/event-stream');
         if (!response.ok || !response.body) {
-          throw new Error(`HTTP ${response.status}`);
+          throw new StreamError(describeStatus(response.status), response.status);
         }
 
         setState('open');
@@ -156,22 +222,24 @@ export function useEventStream() {
             break;
           }
           buffer += decoder.decode(value, { stream: true });
-          const { payloads, rest } = parseFrames(buffer);
+          const { frames, rest } = parseFrames(buffer);
           buffer = rest;
-          payloads.forEach(handlePayload);
+          frames.forEach(handleFrame);
         }
 
         if (!stopped) {
-          throw new Error('Stream ended');
+          throw new StreamError('Stream ended');
         }
       } catch (err) {
         if (stopped || (err instanceof DOMException && err.name === 'AbortError')) {
           return;
         }
+        abortController?.abort();
         const message = err instanceof Error ? err.message : 'Unknown error';
+        const relist = err instanceof StreamError && err.status === 410;
         setState('error');
-        setError(`Event stream error: ${message}. Reconnecting...`);
-        reconnectTimer = window.setTimeout(connect, 2000);
+        setError(`Event stream error: ${message}. ${relist ? 'Relisting' : 'Reconnecting'}...`);
+        reconnectTimer = window.setTimeout(connect, relist ? 0 : 2000);
       }
     };
 
