@@ -214,6 +214,16 @@ kubectl get pods -n everest-system -l app.kubernetes.io/name=my-plugin
 
 Then open the OpenEverest UI — you should see "My Plugin" in the sidebar.
 
+## OpenShift / Pod Security
+
+The chart runs under the Kubernetes `restricted` Pod Security Standard and OpenShift's default `restricted-v2` SCC with no extra grants:
+
+- The image sets a numeric non-root user (`USER 65532:65532` in the `Dockerfile`).
+- The pod sets `runAsNonRoot` and `seccompProfile: RuntimeDefault`; the container drops all capabilities, disallows privilege escalation and uses a read-only root filesystem, with an `emptyDir` at `/tmp` for scratch files. Override them with `podSecurityContext` / `securityContext` in `values.yaml`.
+- The plugin gets its own ServiceAccount without a mounted token. Set `serviceAccount.automountServiceAccountToken=true` (and add RBAC) if your backend calls the Kubernetes API.
+
+When you customize the plugin, **don't set `runAsUser`, `runAsGroup` or `fsGroup`** to fixed values: OpenShift assigns each namespace its own UID range and rejects pods that ask for IDs outside it. Keep a numeric `USER` in the image instead (a user *name* fails `runAsNonRoot`), and write only to `/tmp` or other mounted volumes. CI installs the chart into a namespace that enforces the `restricted` standard to catch regressions.
+
 ## Uninstall
 
 ```bash

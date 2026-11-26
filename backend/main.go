@@ -48,7 +48,7 @@ func everestAPIURL() string {
 	}
 
 	// Fallback to the conventional in-cluster DNS name.
-	return "http://everest-server.everest-system.svc.cluster.local:8080"
+	return "http://everest.everest-system.svc.cluster.local:8080"
 }
 
 func listenPort() string {

@@ -13,6 +13,30 @@ fullnameOverride: ""
 service:
   port: 8080
 
+serviceAccount:
+  # Create a dedicated ServiceAccount for the plugin.
+  create: true
+  # Name of the ServiceAccount. Defaults to the release fullname when create is true.
+  name: ""
+  # The example backend doesn't call the Kubernetes API. Set to true if yours does
+  # (and add the RBAC it needs).
+  automountServiceAccountToken: false
+
+# Pod and container security contexts. The defaults satisfy the Kubernetes
+# "restricted" Pod Security Standard and OpenShift's restricted-v2 SCC.
+# Don't set runAsUser, runAsGroup or fsGroup: OpenShift assigns a per-namespace
+# UID range and rejects fixed IDs. The image sets a numeric non-root USER instead.
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
 plugin:
   displayName: "My Plugin"
   description: "A working OpenEverest generic plugin template — customize it to build your own plugin."
