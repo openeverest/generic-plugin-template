@@ -30,4 +30,8 @@ COPY --from=backend-builder /app/server /usr/local/bin/server
 
 EXPOSE 8080
 
+# Numeric non-root user, so runAsNonRoot works without a fixed runAsUser in the
+# chart (OpenShift's restricted-v2 SCC assigns its own UID and rejects fixed ones).
+USER 65532:65532
+
 ENTRYPOINT ["server"]

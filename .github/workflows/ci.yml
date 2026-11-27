@@ -71,3 +71,68 @@ jobs:
           version: "3.14.0"
 
       - run: helm lint charts/my-plugin/
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Pod Security: the chart must run under the "restricted" Pod Security
+  # Standard and must not pin UIDs/GIDs (OpenShift restricted-v2 rejects them).
+  # ──────────────────────────────────────────────────────────────────────────
+  pod-security:
+    name: Pod Security (restricted)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: "3.14.0"
+
+      - name: No fixed runAsUser/runAsGroup/fsGroup
+        run: |
+          for extra in "" "--api-versions security.openshift.io/v1/SecurityContextConstraints"; do
+            if helm template t charts/my-plugin/ $extra | grep -nE '^\s*(runAsUser|runAsGroup|fsGroup):'; then
+              echo "::error::chart sets fixed IDs (helm template $extra); OpenShift restricted-v2 rejects them"
+              exit 1
+            fi
+          done
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Build frontend bundle
+        run: npm ci && npm run build
+
+      - name: Build image
+        run: docker build -t my-plugin:ci .
+
+      - uses: helm/kind-action@ea822c7bf1874f08e5a491df991c228edffc3376 # v1.15.2
+        with:
+          cluster_name: pss
+
+      - name: Install into a restricted namespace
+        run: |
+          kind load docker-image my-plugin:ci --name pss
+          kubectl create namespace pss
+          kubectl label namespace pss \
+            pod-security.kubernetes.io/enforce=restricted \
+            pod-security.kubernetes.io/warn=restricted
+          # The Plugin CR needs the OpenEverest CRDs; only the workload matters here.
+          helm template t charts/my-plugin/ -n pss \
+            --set image.repository=my-plugin --set image.tag=ci --set image.pullPolicy=Never \
+            --show-only templates/serviceaccount.yaml \
+            --show-only templates/service.yaml \
+            --show-only templates/deployment.yaml \
+            | kubectl apply -n pss -f - 2>&1 | tee apply.log
+          if grep -qi 'would violate PodSecurity' apply.log; then
+            echo "::error::chart violates the restricted Pod Security Standard"
+            exit 1
+          fi
+          kubectl -n pss rollout status deployment/t-my-plugin --timeout=180s
+
+      - name: Debug
+        if: failure()
+        run: |
+          kubectl -n pss get events --sort-by=.lastTimestamp || true
+          kubectl -n pss describe pods || true
+          kubectl -n pss logs deployment/t-my-plugin || true
